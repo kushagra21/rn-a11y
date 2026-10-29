@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-10-29)
 
 - `audit --links` / `--url` opens each deep link (rn-deeplink's `.deeplinks.json`, a text file, or URLs) and audits the screen it lands on, into one report. Links that don't open are reported and fail the run.
 - Checked against a live React Native 0.83.6 app on an Android 17 (API 37) emulator, for `audit`, `watch` and `--links`.
