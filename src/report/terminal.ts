@@ -27,6 +27,7 @@ export function formatResult(result: AuditResult): string {
   const device = `${result.device.name}${result.device.detail ? `, ${result.device.detail}` : ""}`;
   const summary = counts(result.findings).map(([s, n]) => COLORS[s](`${n} ${s}`)).join(", ");
   lines.push(pc.bold(`${result.name ? `${result.name} · ` : ""}${platform} · ${result.app ?? "app"} · ${device}`));
+  if (result.url) lines.push(pc.dim(result.url));
   lines.push(
     result.findings.length
       ? `${result.findings.length} issue${result.findings.length === 1 ? "" : "s"}: ${summary}`

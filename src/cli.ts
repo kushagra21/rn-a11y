@@ -5,6 +5,7 @@ import { Command, Option } from "commander";
 import pc from "picocolors";
 import { auditCommand } from "./commands/audit.js";
 import { doctorCommand } from "./commands/doctor.js";
+import { linkAuditCommand } from "./commands/links.js";
 import { watchCommand } from "./commands/watch.js";
 import { RULES } from "./core/rules/index.js";
 import { SEVERITIES } from "./core/types.js";
@@ -34,12 +35,20 @@ export function buildProgram(): Command {
     .option("-o, --out <dir>", "report folder (default: a11y-report)")
     .option("-n, --name <screen>", "name of the screen, used as the report title and subfolder")
     .option("--from <dir>", "re-audit a saved report or snapshot folder instead of a device")
+    .option("--links [file]", "open each deep link in a file and audit the screen it lands on (default: .deeplinks.json)")
+    .option("--url <url>", "a deep link to open and audit; repeat for more", (v: string, prev: string[] = []) => [...prev, v])
+    .option("--wait <ms>", "with --links/--url: how long to wait for each screen to settle", (v) => Number.parseInt(v, 10), 10000)
+    .option("-v, --verbose", "with --links/--url: print every issue of each screen, not just the counts")
     .addOption(new Option("--fail-on <severity>", "exit with code 1 when an issue this severe or worse is found").choices(SEVERITIES))
     .option("--ignore <rules>", "rule ids to skip, comma-separated", collect)
     .option("--no-screenshot", "skip the screenshot (no contrast check, no picture in the report)")
     .option("--no-report", "don't write the HTML report")
     .option("--json", "print machine-readable JSON")
-    .action((options) => auditCommand(options, version));
+    .action((options) => {
+      if (!options.links && !options.url) return auditCommand(options, version);
+      if (options.from) throw new DeviceToolError("--from re-audits a saved report; it can't be combined with --links or --url.");
+      return linkAuditCommand(options, version);
+    });
 
   program
     .command("watch")

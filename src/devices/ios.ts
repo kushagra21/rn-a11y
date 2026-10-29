@@ -2,7 +2,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { decodePng } from "../core/image.js";
 import { extractJson, parseAxTree } from "../core/readers/ios.js";
-import type { DeviceInfo } from "../core/types.js";
+import { walk } from "../core/tree.js";
+import type { A11yNode, DeviceInfo } from "../core/types.js";
 import { DeviceToolError, ToolMissingError, lastLine, type DeviceSession, type Exec } from "./exec.js";
 
 /** `com.apple.CoreSimulator.SimRuntime.iOS-18-2` → `iOS 18.2` */
@@ -65,9 +66,53 @@ async function describeUi(run: Exec, udid: string): Promise<{ tool: string; outp
   throw new DeviceToolError(NO_TREE_TOOL);
 }
 
-export function iosSession(run: Exec, device: DeviceInfo, options: { tmpDir: string }): DeviceSession {
+/** iOS asks "Open in “App”?" before a custom-scheme link opens an app; this finds its Open button. */
+export function findOpenPrompt(root: A11yNode): A11yNode | undefined {
+  const nodes = [...walk(root)].map(({ node }) => node);
+  // The prompt's buttons aren't inside its sheet in the tree, so look for them anywhere.
+  if (!nodes.some((n) => /^Open in “.+”\?$/.test(n.label))) return undefined;
+  return nodes.find((n) => n.kind === "button" && n.label === "Open");
+}
+
+/** Taps a point with whichever tree tool is installed. */
+async function tapAt(run: Exec, udid: string, tool: string, x: number, y: number) {
+  const [px, py] = [String(Math.round(x)), String(Math.round(y))];
+  const result = tool === "axe" ? await run("axe", ["tap", "-x", px, "-y", py, "--udid", udid]) : await run("idb", ["ui", "tap", px, py, "--udid", udid]);
+  if (result.exitCode !== 0) throw new DeviceToolError(`Couldn't tap Open on iOS's "Open in app?" prompt: ${lastLine(result.stderr || result.stdout)}`);
+}
+
+const PROMPT_CHECKS = 12;
+const PROMPT_POLL = 300;
+
+export function iosSession(
+  run: Exec,
+  device: DeviceInfo,
+  options: { tmpDir: string; sleep?: (ms: number) => Promise<void> },
+): DeviceSession {
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((done) => setTimeout(done, ms)));
   return {
     device,
+    async openUrl(url) {
+      const result = await simctl(run, ["openurl", device.id, url]);
+      if (result.exitCode === 0) {
+        // Confirm iOS's "Open in “App”?" prompt until an app is in front. Prompts queue up,
+        // one per link opened, so there may be more than one.
+        for (let i = 0; i < PROMPT_CHECKS; i++) {
+          const { tool, output } = await describeUi(run, device.id);
+          const root = parseAxTree(extractJson(output));
+          const open = findOpenPrompt(root);
+          if (open) await tapAt(run, device.id, tool, open.frame.x + open.frame.width / 2, open.frame.y + open.frame.height / 2);
+          else if (root.label.trim()) return;
+          await sleep(PROMPT_POLL);
+        }
+        return;
+      }
+      // -10814 is kLSApplicationNotFoundErr: no installed app registers this scheme.
+      if (/-10814|LSApplicationWorkspaceErrorDomain/.test(result.stderr)) {
+        throw new DeviceToolError(`No app on ${device.name} handles ${new URL(url).protocol}// links. Check the scheme with rn-deeplink scan.`);
+      }
+      throw new DeviceToolError(`simctl couldn't open ${url}: ${lastLine(result.stderr)}`);
+    },
     async readTree() {
       const { output } = await describeUi(run, device.id);
       const root = parseAxTree(extractJson(output));

@@ -71,6 +71,8 @@ export interface Snapshot {
   platform: Platform;
   /** Screen name from watch mode, e.g. "Checkout". */
   name?: string;
+  /** The deep link that opened the screen. */
+  url?: string;
   device: DeviceInfo;
   /** iOS app name or Android package. */
   app?: string;
@@ -110,6 +112,7 @@ export type ProfileName = "wcag22-aa" | "platform";
 export interface AuditResult {
   platform: Platform;
   name?: string;
+  url?: string;
   device: DeviceInfo;
   app?: string;
   profile: ProfileName;

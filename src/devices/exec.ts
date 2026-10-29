@@ -46,6 +46,8 @@ export const lastLine = (text: string) => text.trim().split("\n").at(-1)?.trim()
 export interface DeviceSession {
   device: DeviceInfo;
   readTree(): Promise<{ root: A11yNode; raw: string }>;
+  /** Opens a deep link in the app; throws DeviceToolError when nothing handles it. */
+  openUrl(url: string): Promise<void>;
   /** The snapshot for a tree just read, with a screenshot taken now. */
   snapshot(tree: { root: A11yNode; raw: string }, options: { screenshot: boolean }): Promise<{ snapshot: Snapshot; raw: { tree: string; screenshot?: Buffer } }>;
 }

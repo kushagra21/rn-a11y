@@ -36,6 +36,7 @@ export function audit(snapshot: Snapshot, options: AuditOptions = {}): AuditResu
   return {
     platform: snapshot.platform,
     ...(snapshot.name ? { name: snapshot.name } : {}),
+    ...(snapshot.url ? { url: snapshot.url } : {}),
     device: snapshot.device,
     ...(snapshot.app ? { app: snapshot.app } : {}),
     profile,

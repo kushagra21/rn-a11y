@@ -26,6 +26,7 @@ export interface AuditOptions {
   failOn?: string;
   ignore?: string[];
   json?: boolean;
+  verbose?: boolean;
 }
 
 export interface Captured {

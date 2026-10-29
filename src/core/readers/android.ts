@@ -20,8 +20,8 @@ const KINDS: [RegExp, Kind][] = [
   [/^android\.widget\.TabWidget$/, "tab"],
 ];
 
-/** Classes React Native reports for a view with no accessibilityRole. */
-export const ROLELESS_CLASSES = new Set(["android.view.ViewGroup", "android.widget.FrameLayout", "android.widget.LinearLayout"]);
+/** The class React Native reports for a Pressable with no accessibilityRole. Native list rows (LinearLayout) read fine without one. */
+export const ROLELESS_CLASSES = new Set(["android.view.ViewGroup"]);
 
 export function kindOf(className: string, text: string): Kind {
   for (const [pattern, kind] of KINDS) if (pattern.test(className)) return kind;

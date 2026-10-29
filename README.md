@@ -30,7 +30,7 @@ rn-a11y reads the **native accessibility tree**, the same one VoiceOver and Talk
 | Android | `adb shell uiautomator dump` | `adb shell screencap` |
 | iOS simulator | [AXe](https://github.com/cameroncooke/AXe) (`axe describe-ui`) or [idb](https://fbidb.io) | `xcrun simctl io screenshot` |
 
-Nothing is added to your app. Because it reads what the native platform exposes, it doesn't depend on the React Native version or architecture. It has been checked against a bare React Native 0.83.6 app (New Architecture) on an iOS 27 simulator; that capture is part of the test suite.
+Nothing is added to your app. Because it reads what the native platform exposes, it doesn't depend on the React Native version or architecture. It has been checked against a bare React Native 0.83.6 app (New Architecture) on an iOS 27 simulator and an Android 17 (API 37) emulator; both captures are part of the test suite.
 
 ## Requirements
 
@@ -58,6 +58,18 @@ rn-a11y rules                          # list the rules
 
 Every audit writes `report.html`, `report.json`, and per-platform `snapshot.json`, `screenshot.png` and the raw tree to the report folder.
 
+### Deep links
+
+```bash
+rn-a11y audit --links                  # every link in .deeplinks.json
+rn-a11y audit --links links.txt        # a JSON file, or one URL per line
+rn-a11y audit --url myapp://cart --url myapp://profile
+```
+
+Opens each link, waits for the screen to settle, and audits it, with one report section per link named after the link. It reads [rn-deeplink](https://github.com/kushagra21/rn-deeplink-debugger)'s `.deeplinks.json` (`{ "links": [{ "name": "Cart", "url": "myapp://cart" }] }`, with an optional `"platform"` per link), but doesn't need rn-deeplink installed. Links open with `xcrun simctl openurl` on iOS and an `android.intent.action.VIEW` intent on Android (sent straight to `--package` when it's set). A link that no app handles is reported and the run exits with code 1, so it can run in CI. If iOS asks "Open in …?", rn-a11y taps Open; it never audits a screen that isn't your app's.
+
+Screens behind a login need the app signed in first.
+
 ### Watch mode
 
 ```bash
@@ -74,10 +86,10 @@ On Android each read takes a little longer (uiautomator takes 1–3 seconds), an
 | Rule | Checks | Source |
 |---|---|---|
 | `control-name` | Tappable elements have an accessible name | WCAG 2.2 SC 4.1.2 |
-| `input-name` | Text fields have a label | WCAG 2.2 SC 4.1.2, 3.3.2 |
+| `input-name` | Text fields have a label; a placeholder alone is flagged as serious | WCAG 2.2 SC 4.1.2, 3.3.2 |
 | `image-name` | Images have a text alternative, or are hidden (needs review) | WCAG 2.2 SC 1.1.1 |
 | `empty-stop` | VoiceOver never stops on an element with nothing to read (iOS) | WCAG 2.2 SC 4.1.2 |
-| `missing-role` | Tappable elements have `accessibilityRole` (on iOS, flagged for review) | WCAG 2.2 SC 4.1.2 |
+| `missing-role` | Tappable React Native views have `accessibilityRole` (on iOS, flagged for review) | WCAG 2.2 SC 4.1.2 |
 | `target-size` | Targets are 24×24, or spaced so a 24-wide circle around them touches nothing | WCAG 2.2 SC 2.5.8 |
 | `platform-target-size` | 44×44pt on iOS, 48×48dp on Android (`--profile platform`) | Apple HIG, Material Design |
 | `text-contrast` | Text reaches 4.5:1; 3:1–4.5:1 is flagged for review, as it passes only for large text | WCAG 2.2 SC 1.4.3 |
@@ -105,7 +117,7 @@ Automated checks find roughly a third of WCAG issues. The HTML report ends with 
 
 ## Limits
 
-- Only screens you open are audited: `audit` checks the current one and `watch` checks each one you visit. Nothing taps through the app for you.
+- Only screens you open are audited: `audit` checks the current one, `watch` each one you visit, and `--links` each one a deep link reaches. Nothing taps through the app for you.
 - `hitSlop` is handled in JavaScript and isn't visible in the native tree, so a small target with a big `hitSlop` is still reported. Ignore it by `testID` once you've checked.
 - iOS doesn't expose whether an element without `accessibilityRole` is tappable: a role-less Pressable looks the same as a View with `accessible={true}`. On iOS, `missing-role` asks for a review, and a role-less element with no label is reported by `empty-stop`. Role-less controls also aren't measured for target size on iOS.
 - Decorative images can't be told apart from meaningful ones, so `image-name` asks for a review.

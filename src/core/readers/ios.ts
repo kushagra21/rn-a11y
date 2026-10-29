@@ -78,12 +78,20 @@ export function extractJson(output: string): RawAxElement[] {
 /** The scroll indicators UIScrollView adds; they aren't part of the app's UI. */
 const SCROLL_BAR = /^(Vertical|Horizontal) scroll bar\b/;
 
-const sameElement = (a: RawAxElement, b: RawAxElement) =>
-  typeOf(a) === typeOf(b) && a.AXLabel === b.AXLabel && JSON.stringify(a.frame ?? a.AXFrame) === JSON.stringify(b.frame ?? b.AXFrame);
-
-/** Drops scroll bars, and elements AXe lists twice in a row under the same parent. */
-const keep = (children: RawAxElement[]) =>
-  children.filter((c, i) => !SCROLL_BAR.test(c.AXLabel ?? "") && !children.slice(0, i).some((prev) => sameElement(prev, c)));
+/**
+ * Drops scroll bars, and elements AXe lists twice under the same parent. Only an exact
+ * copy, children included, is a repeat: empty wrappers often share a type and frame.
+ */
+const keep = (children: RawAxElement[]) => {
+  const seen = new Set<string>();
+  return children.filter((c) => {
+    if (SCROLL_BAR.test(c.AXLabel ?? "")) return false;
+    const key = JSON.stringify(c);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
 
 export function parseAxTree(elements: RawAxElement[]): A11yNode {
   const convert = (raw: RawAxElement, id: string): A11yNode => {

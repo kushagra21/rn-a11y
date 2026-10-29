@@ -1,15 +1,13 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import pc from "picocolors";
-import { audit } from "../core/audit.js";
-import { SAME_SCREEN, layoutKey, screenName, signature, similarity, slug } from "../core/screens.js";
-import { saveSnapshot } from "../core/store.js";
-import type { AuditResult, Platform, Snapshot } from "../core/types.js";
+import { SAME_SCREEN, layoutKey, signature, similarity } from "../core/screens.js";
+import type { Platform } from "../core/types.js";
 import { BusyError, DeviceToolError, exec, type DeviceSession, type Exec } from "../devices/exec.js";
-import { renderHtml, type ReportSection } from "../report/html.js";
 import { counts, formatResult } from "../report/terminal.js";
-import { failedAt, loadSettings, openSession } from "./audit.js";
+import { failedAt, loadSettings } from "./audit.js";
+import { clearScreens, openSessions, recordScreen, writeScreensReport, type AuditedScreen } from "./screens.js";
 
 export interface WatchOptions {
   cwd: string;
@@ -27,13 +25,7 @@ export interface WatchOptions {
   verbose?: boolean;
 }
 
-export interface WatchedScreen {
-  name: string;
-  platform: Platform;
-  dir: string;
-  result: AuditResult;
-  section: ReportSection;
-}
+export type WatchedScreen = AuditedScreen;
 
 export type WatchEvent =
   | { type: "watching"; sessions: DeviceSession[]; notes: string[] }
@@ -78,29 +70,10 @@ export async function runWatch(options: WatchOptions, run: Exec = exec, version 
   const signatures: { platform: Platform; signature: Set<string> }[] = [];
 
   try {
-    const platforms: Platform[] = options.platform === "both" ? ["ios", "android"] : [options.platform];
-    const states: PlatformState[] = [];
-    const notes: string[] = [];
-    const skipped: string[] = [];
-    for (const platform of platforms) {
-      if (platform === "ios" && options.platform === "both" && process.platform !== "darwin") continue;
-      try {
-        const opened = await openSession(run, platform, {
-          tmpDir,
-          ...(options.device ? { device: options.device } : {}),
-          ...(settings.package ? { package: settings.package } : {}),
-        });
-        states.push({ session: opened.session });
-        notes.push(...opened.notes);
-      } catch (error) {
-        if (options.platform !== "both" || !(error instanceof DeviceToolError)) throw error;
-        skipped.push(`${platform === "ios" ? "iOS" : "Android"}: ${error.message}`);
-      }
-    }
-    if (states.length === 0) throw new DeviceToolError(`Nothing to watch.\n  ${skipped.join("\n  ")}`);
-    // Each run replaces the last one's screens, which this tool wrote.
-    await rm(join(out, "screens"), { recursive: true, force: true });
-    hooks.onEvent?.({ type: "watching", sessions: states.map((s) => s.session), notes });
+    const { sessions, notes } = await openSessions(run, { ...options, ...(settings.package ? { package: settings.package } : {}), tmpDir });
+    const states: PlatformState[] = sessions.map((session) => ({ session }));
+    await clearScreens(out);
+    hooks.onEvent?.({ type: "watching", sessions, notes });
 
     while (!hooks.signal.aborted) {
       for (const state of states) {
@@ -129,22 +102,9 @@ export async function runWatch(options: WatchOptions, run: Exec = exec, version 
         if (sig.size === 0 || signatures.some((s) => s.platform === platform && similarity(s.signature, sig) >= SAME_SCREEN)) continue;
         signatures.push({ platform, signature: sig });
 
-        const { snapshot, raw } = await state.session.snapshot(tree, { screenshot: options.screenshot });
-        const index = screens.length + 1;
-        const name = uniqueName(screenName(snapshot.root, snapshot.screen) ?? `Screen ${index}`, screens);
-        const named: Snapshot = { ...snapshot, name };
-        const result = audit(named, { profile: settings.profile, ignore: settings.ignore });
-        const dir = join(out, "screens", `${String(index).padStart(2, "0")}-${slug(name)}`);
-        await saveSnapshot(join(dir, platform), named, raw);
-        const screen: WatchedScreen = {
-          name,
-          platform,
-          dir,
-          result,
-          section: { result, title: name, screen: named.screen, ...(raw.screenshot ? { screenshot: raw.screenshot } : {}) },
-        };
-        screens.push(screen);
-        await writeReport(out, screens, version);
+        const screen = await recordScreen(state.session, tree, { out, screens, screenshot: options.screenshot, profile: settings.profile, ignore: settings.ignore });
+        await writeScreensReport(out, screens, version, "Watch");
+        const index = screens.length;
         hooks.onEvent?.({ type: "screen", screen, index });
       }
       await sleep(options.interval, hooks.signal);
@@ -155,22 +115,6 @@ export async function runWatch(options: WatchOptions, run: Exec = exec, version 
 
   const results = screens.map((s) => s.result);
   return { screens, reportPath: screens.length ? reportPath : undefined, failed: failedAt(results, settings.failOn), failOn: settings.failOn };
-}
-
-/** Two different screens can share a heading ("Settings"); number the later ones. */
-function uniqueName(name: string, screens: WatchedScreen[]) {
-  const taken = new Set(screens.map((s) => s.name));
-  if (!taken.has(name)) return name;
-  let n = 2;
-  while (taken.has(`${name} (${n})`)) n++;
-  return `${name} (${n})`;
-}
-
-async function writeReport(out: string, screens: WatchedScreen[], version: string) {
-  await mkdir(out, { recursive: true });
-  const results = screens.map((s) => s.result);
-  await writeFile(join(out, "report.json"), `${JSON.stringify({ version, results }, null, 2)}\n`);
-  await writeFile(join(out, "report.html"), renderHtml(screens.map((s) => s.section), { title: "Watch", version }));
 }
 
 const show = (path: string) => {

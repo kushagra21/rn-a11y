@@ -31,13 +31,24 @@ export const inputName: Rule = {
   profiles: BOTH,
   run: ({ nodes }) =>
     nodes
-      .filter(({ node }) => node.kind === "input" && !node.label.trim() && !node.hint?.trim())
-      .map(({ node }) => ({
-        severity: "critical",
-        message: "Text field has no label, so a screen reader user can't tell what to type.",
-        fix: 'Add accessibilityLabel (e.g. accessibilityLabel="Email"). A placeholder alone disappears once the user types.',
-        node: describe(node),
-      })),
+      .filter(({ node }) => node.kind === "input" && !node.label.trim())
+      .map(({ node }) => {
+        // Android reports the placeholder as the hint; iOS as the value of an empty field.
+        const placeholder = (node.hint ?? node.text).trim();
+        return placeholder
+          ? {
+              severity: "serious" as const,
+              message: `Text field is labelled only by its placeholder ${label(placeholder)}, which disappears once the user types.`,
+              fix: `Add accessibilityLabel (e.g. accessibilityLabel="${placeholder.length <= 30 ? placeholder : "Coupon code"}"), or a visible label.`,
+              node: describe(node),
+            }
+          : {
+              severity: "critical" as const,
+              message: "Text field has no label, so a screen reader user can't tell what to type.",
+              fix: 'Add accessibilityLabel (e.g. accessibilityLabel="Email"). A placeholder alone disappears once the user types.',
+              node: describe(node),
+            };
+      }),
 };
 
 export const imageName: Rule = {

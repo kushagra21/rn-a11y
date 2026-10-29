@@ -84,6 +84,7 @@ function section(s: ReportSection, index: number) {
   return `<section class="platform" id="s${index}">
   <header class="phead">
     <h2>${heading}</h2>
+    ${r.url ? `<p class="device"><code>${esc(r.url)}</code></p>` : ""}
     <p class="device">${esc(r.device.name)}${r.device.detail ? ` · ${esc(r.device.detail)}` : ""} · ${r.stats.elements} elements, ${r.stats.targets} touch targets, ${r.stats.texts} text</p>
     <p class="summary">${summary}</p>
   </header>

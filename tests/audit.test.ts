@@ -44,8 +44,13 @@ describe("audit on Android", () => {
 
   it("flags controls and fields with no name", () => {
     expect(by(result, "control-name")).toEqual(["close"]);
-    expect(by(result, "input-name")).toEqual(["coupon-input"]);
     expect(result.findings.find((f) => f.rule === "control-name")!.severity).toBe("critical");
+    // No label at all is critical; a placeholder (hint) alone is serious.
+    const inputs = result.findings.filter((f) => f.rule === "input-name").map((f) => [f.node.testID, f.severity]);
+    expect(inputs).toEqual([
+      ["coupon-input", "critical"],
+      ["email", "serious"],
+    ]);
   });
 
   it("flags a meaningful-looking image, but not the icon inside a control", () => {
@@ -99,7 +104,7 @@ describe("audit on Android", () => {
     expect(by(filtered, "duplicate-name")).toEqual([]);
     expect(by(filtered, "control-name")).toEqual([]);
     expect(by(filtered, "text-contrast")).toEqual([]);
-    expect(by(filtered, "input-name")).toEqual(["coupon-input"]);
+    expect(by(filtered, "input-name")).toEqual(["coupon-input", "email"]);
   });
 
   it("notes when contrast couldn't be checked", () => {
@@ -200,8 +205,8 @@ describe("real capture: React Native 0.83.6 on iOS", () => {
   it("finds every planted bug and nothing else", () => {
     expect(result.findings.map((f) => [f.rule, f.node.testID ?? f.node.name])).toEqual([
       ["control-name", "close"],
-      ["input-name", "coupon-input"],
       ["empty-stop", "cart"],
+      ["input-name", "coupon-input"],
       ["text-contrast", "Apply coupon"],
       ["image-name", "promo-banner"],
       ["missing-role", "guest"],
@@ -223,5 +228,47 @@ describe("real capture: React Native 0.83.6 on iOS", () => {
   it("passes the 20pt favorite under WCAG's spacing exception, but not the platform minimum", () => {
     expect(by(result, "target-size")).toEqual([]);
     expect(by(audit(snapshot, { profile: "platform" }), "platform-target-size")).toEqual(["close", "favorite"]);
+  });
+});
+
+/** Captured with uiautomator from the same app on an Android 17 (API 37) emulator. */
+describe("real capture: React Native 0.83.6 on Android", () => {
+  const dpScale = 420 / 160;
+  const snapshot: Snapshot = {
+    platform: "android",
+    device: { platform: "android", id: "emulator-5554", name: "sdk gphone64 arm64", detail: "emulator" },
+    app: "com.a11ytestapp",
+    screen: { width: 1080 / dpScale, height: 2400 / dpScale },
+    scale: dpScale,
+    capturedAt: "2026-10-29T14:31:00.000Z",
+    root: parseUiAutomator(fixture("android-rn083-checkout.xml"), { dpScale }),
+    screenshot: decodePng(readFileSync(join(import.meta.dirname, "fixtures", "android-rn083-checkout.png"))),
+  };
+  const result = audit(snapshot);
+
+  it("finds every planted bug and nothing else", () => {
+    expect(result.findings.map((f) => [f.rule, f.node.testID ?? f.node.name])).toEqual([
+      ["control-name", "close"],
+      ["control-name", "cart"],
+      ["input-name", "coupon-input"],
+      ["text-contrast", "Apply coupon"],
+      ["missing-role", "guest"],
+      ["image-name", "promo-banner"],
+      ["duplicate-name", "edit-shipping"],
+      ["duplicate-name", "edit-payment"],
+      ["redundant-role", "play"],
+    ]);
+  });
+
+  it("reads React Native's classes: a role becomes a widget class, no role stays a ViewGroup", () => {
+    const nodes = [...walk(snapshot.root)].map(({ node }) => node);
+    const byId = (id: string) => nodes.find((n) => n.testID === id)!;
+    expect(byId("place-order").className).toBe("android.widget.Button");
+    expect(byId("guest").className).toBe("android.view.ViewGroup");
+    expect(byId("promo-banner").className).toBe("android.widget.ImageView");
+  });
+
+  it("measures the same contrast as on iOS", () => {
+    expect(result.findings.find((f) => f.rule === "text-contrast")!.message).toContain("2.54:1 (#9CA3AF on #FFFFFF)");
   });
 });

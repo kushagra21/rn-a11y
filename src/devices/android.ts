@@ -20,6 +20,9 @@ export function findAdb(env = process.env, home = homedir()): string {
   return sdks.map((sdk) => sdk && join(sdk, "platform-tools", exe)).find((path): path is string => !!path && existsSync(path)) ?? "adb";
 }
 
+/** Single-quote a value for the device shell, since `adb shell` joins arguments into one command line. */
+export const shellQuote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
+
 async function adb(run: Exec, adbPath: string, args: string[]) {
   try {
     return await run(adbPath, args);
@@ -51,6 +54,9 @@ export async function listAndroidDevices(run: Exec, adbPath: string): Promise<{ 
   return { devices, unusable };
 }
 
+const NULL_ROOT = /null root node/i;
+const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
+
 const REMOTE_XML = "/data/local/tmp/rn-a11y.xml";
 const REMOTE_PNG = "/data/local/tmp/rn-a11y.png";
 
@@ -61,15 +67,34 @@ export function androidSession(run: Exec, adbPath: string, device: DeviceInfo, o
 
   return {
     device,
+    async openUrl(url) {
+      const args = ["am", "start", "-W", "-a", "android.intent.action.VIEW", "-c", "android.intent.category.BROWSABLE", "-d", shellQuote(url)];
+      // With the package known, skip the app chooser and the browser.
+      if (options.package) args.push(options.package);
+      const result = await shell(...args);
+      const output = `${result.stdout}\n${result.stderr}`;
+      if (/unable to resolve Intent/i.test(output)) throw new DeviceToolError(`No app on ${device.name} handles ${url}. Check the intent filters with rn-deeplink scan.`);
+      if (result.exitCode !== 0 || /^Error:/m.test(output)) throw new DeviceToolError(`adb couldn't open ${url}: ${lastLine(output)}`);
+    },
     async readTree() {
-      const dump = await shell("uiautomator", "dump", REMOTE_XML);
+      let dump = await shell("uiautomator", "dump", REMOTE_XML);
+      // "null root node" means a window is still appearing; it passes within a second or two.
+      for (let i = 0; i < 3 && NULL_ROOT.test(dump.stdout + dump.stderr); i++) {
+        await sleep(500);
+        dump = await shell("uiautomator", "dump", REMOTE_XML);
+      }
       const dumpOutput = `${dump.stdout}\n${dump.stderr}`;
+      if (NULL_ROOT.test(dumpOutput)) throw new BusyError("uiautomator couldn't find the app's window. Is the app open and in front?");
       if (/could not get idle state/i.test(dumpOutput)) {
         throw new BusyError(
           "uiautomator couldn't read the screen because the app never stops animating (a spinner, Lottie or looping animation). Stop the animation, or turn off animations in Developer options, then try again.",
         );
       }
-      if (dump.exitCode !== 0 || /ERROR/i.test(dumpOutput)) throw new DeviceToolError(`uiautomator dump failed: ${lastLine(dumpOutput)}`);
+      if (dump.exitCode !== 0 || /ERROR/i.test(dumpOutput)) {
+        // No reason given: usually another uiautomator client was busy; the next read works.
+        if (!lastLine(dumpOutput)) throw new BusyError("uiautomator couldn't read the screen.");
+        throw new DeviceToolError(`uiautomator dump failed: ${lastLine(dumpOutput)}`);
+      }
       const xml = await adb(run, adbPath, ["-s", device.id, "exec-out", "cat", REMOTE_XML]);
       if (xml.exitCode !== 0 || !xml.stdout.includes("<hierarchy")) throw new DeviceToolError(`Couldn't read the uiautomator dump: ${lastLine(xml.stderr)}`);
       const root = parseUiAutomator(xml.stdout, { dpScale: await scale(), ...(options.package ? { package: options.package } : {}) });

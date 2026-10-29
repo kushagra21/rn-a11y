@@ -70,6 +70,13 @@ describe("iOS accessibility tree reader", () => {
     expect(tree.frame.width).toBe(390);
   });
 
+  it("drops exact repeats but keeps look-alike wrappers with different content", () => {
+    const frame = { x: 0, y: 0, width: 402, height: 874 };
+    const wrapper = (label: string) => ({ type: "Group", AXLabel: null, frame, children: [{ type: "Button", AXLabel: label, frame }] });
+    const tree = parseAxTree([{ type: "Application", AXLabel: "App", frame, children: [wrapper("Back"), wrapper("Open"), wrapper("Open")] }]);
+    expect(tree.children.map((c) => c.children[0]!.label)).toEqual(["Back", "Open"]);
+  });
+
   it("finds the JSON among log lines", () => {
     expect(extractJson('2026-10-29 info: connecting\n[{"type":"Application"}]')).toEqual([{ type: "Application" }]);
     expect(() => extractJson("")).toThrow(/empty/);
