@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+
+
+# Local project spec, kept out of the public repo
+CLAUDE.md
+a11y-report/

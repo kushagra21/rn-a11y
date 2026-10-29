@@ -1,0 +1,127 @@
+[
+  {
+    "AXFrame": "{{0, 0}, {402, 874}}",
+    "AXUniqueId": null,
+    "frame": { "y": 0, "x": 0, "width": 402, "height": 874 },
+    "role_description": "application",
+    "AXLabel": "Shop",
+    "content_required": false,
+    "type": "Application",
+    "title": null,
+    "help": null,
+    "custom_actions": [],
+    "AXValue": null,
+    "enabled": true,
+    "role": "AXApplication",
+    "children": [
+      {
+        "AXFrame": "{{16, 62}, {30, 30}}",
+        "AXUniqueId": "close",
+        "frame": { "y": 62, "x": 16, "width": 30, "height": 30 },
+        "role_description": "button",
+        "AXLabel": null,
+        "type": "Button",
+        "AXValue": null,
+        "enabled": true,
+        "role": "AXButton",
+        "children": []
+      },
+      {
+        "AXFrame": "{{47, 66}, {20, 20}}",
+        "AXUniqueId": "favorite",
+        "frame": { "y": 66, "x": 47, "width": 20, "height": 20 },
+        "role_description": "button",
+        "AXLabel": "Favorite",
+        "type": "Button",
+        "AXValue": null,
+        "enabled": true,
+        "role": "AXButton",
+        "children": []
+      },
+      {
+        "AXFrame": "{{350, 62}, {36, 36}}",
+        "AXUniqueId": "cart",
+        "frame": { "y": 62, "x": 350, "width": 36, "height": 36 },
+        "role_description": "element",
+        "AXLabel": null,
+        "type": "Other",
+        "AXValue": null,
+        "enabled": true,
+        "role": "AXGroup",
+        "children": []
+      },
+      {
+        "AXFrame": "{{16, 110}, {200, 34}}",
+        "AXUniqueId": null,
+        "frame": { "y": 110, "x": 16, "width": 200, "height": 34 },
+        "role_description": "text",
+        "AXLabel": "Checkout",
+        "type": "StaticText",
+        "AXValue": null,
+        "enabled": true,
+        "role": "AXStaticText",
+        "children": []
+      },
+      {
+        "AXFrame": "{{16, 160}, {370, 150}}",
+        "AXUniqueId": "promo-banner",
+        "frame": { "y": 160, "x": 16, "width": 370, "height": 150 },
+        "role_description": "image",
+        "AXLabel": null,
+        "type": "Image",
+        "AXValue": null,
+        "enabled": true,
+        "role": "AXImage",
+        "children": []
+      },
+      {
+        "AXFrame": "{{16, 330}, {250, 44}}",
+        "AXUniqueId": "coupon-input",
+        "frame": { "y": 330, "x": 16, "width": 250, "height": 44 },
+        "role_description": "text field",
+        "AXLabel": null,
+        "type": "TextField",
+        "AXValue": "",
+        "enabled": true,
+        "role": "AXTextField",
+        "children": []
+      },
+      {
+        "AXFrame": "{{280, 340}, {106, 24}}",
+        "AXUniqueId": null,
+        "frame": { "y": 340, "x": 280, "width": 106, "height": 24 },
+        "role_description": "text",
+        "AXLabel": "Apply coupon",
+        "type": "StaticText",
+        "AXValue": null,
+        "enabled": true,
+        "role": "AXStaticText",
+        "children": []
+      },
+      {
+        "AXFrame": "{{16, 400}, {370, 56}}",
+        "AXUniqueId": "place-order",
+        "frame": { "y": 400, "x": 16, "width": 370, "height": 56 },
+        "role_description": "button",
+        "AXLabel": "Place order",
+        "type": "Button",
+        "AXValue": null,
+        "enabled": true,
+        "role": "AXButton",
+        "children": []
+      },
+      {
+        "AXFrame": "{{16, 470}, {370, 56}}",
+        "AXUniqueId": "play",
+        "frame": { "y": 470, "x": 16, "width": 370, "height": 56 },
+        "role_description": "button",
+        "AXLabel": "Play video button",
+        "type": "Button",
+        "AXValue": null,
+        "enabled": true,
+        "role": "AXButton",
+        "children": []
+      }
+    ]
+  }
+]
