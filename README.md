@@ -21,6 +21,12 @@ iOS · Shop · iPhone 18 Pro, iOS 27.0
 Report: a11y-report/report.html
 ```
 
+The HTML report marks each issue on the screenshot, next to what's wrong, the WCAG criterion and how to fix it:
+
+![rn-a11y report: issues boxed and numbered on an iOS screenshot of a checkout screen, with the list of findings beside it](https://raw.githubusercontent.com/kushagra21/rn-a11y/main/docs/report-screenshot.png)
+
+This is a React Native 0.83.6 test app audited on iOS and Android. Download [docs/sample-report.html](docs/sample-report.html) and open it in a browser to try the full report: click a box to jump to its issue, and filter by severity.
+
 ## How it works
 
 rn-a11y reads the **native accessibility tree**, the same one VoiceOver and TalkBack use, and takes a screenshot at the same moment:
