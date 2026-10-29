@@ -4,6 +4,12 @@
   "description": "Audit the accessibility of a running React Native app on iOS simulators and Android emulators or devices, against WCAG 2.2 and the platform guidelines.",
   "license": "MIT",
   "author": "Kushagra Sinha",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kushagra21/rn-a11y.git"
+  },
+  "homepage": "https://github.com/kushagra21/rn-a11y#readme",
+  "bugs": "https://github.com/kushagra21/rn-a11y/issues",
   "type": "module",
   "bin": {
     "rn-a11y": "dist/cli.js"
