@@ -1,6 +1,6 @@
 import { hex, sampleContrast } from "../contrast.js";
 import { accessibleName, describe } from "../tree.js";
-import type { Finding } from "../types.js";
+import type { A11yNode, Finding } from "../types.js";
 import type { Rule } from "./types.js";
 
 /**
@@ -18,10 +18,14 @@ export const textContrast: Rule = {
       ctx.notes.push("Contrast wasn't checked: no screenshot.");
       return [];
     }
-    // iOS folds a control's text into the control, so check controls with a name too.
+    // When iOS folds a control's text into the control, check the control itself.
+    const isText = (node: A11yNode) => node.kind === "text" || node.kind === "header";
+    const hasText = (node: A11yNode): boolean => node.children.some((c) => isText(c) || hasText(c));
+    // iOS lists a Text as a parent with an identical child; check only the innermost.
     const texts = ctx.nodes.filter(
       ({ node }) =>
-        (node.kind === "text" && accessibleName(node)) || (platform === "ios" && node.interactive && node.kind !== "input" && accessibleName(node)),
+        (isText(node) && accessibleName(node) && !hasText(node)) ||
+        (platform === "ios" && node.interactive && node.kind !== "input" && accessibleName(node) && !hasText(node)),
     );
     let busy = 0;
     const findings = texts.flatMap(({ node }): Omit<Finding, "rule" | "source">[] => {

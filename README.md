@@ -30,7 +30,7 @@ rn-a11y reads the **native accessibility tree**, the same one VoiceOver and Talk
 | Android | `adb shell uiautomator dump` | `adb shell screencap` |
 | iOS simulator | [AXe](https://github.com/cameroncooke/AXe) (`axe describe-ui`) or [idb](https://fbidb.io) | `xcrun simctl io screenshot` |
 
-Nothing is added to your app. Because it reads what the native platform exposes, it works the same on the New Architecture (Fabric) and the old one, and on any React Native version.
+Nothing is added to your app. Because it reads what the native platform exposes, it doesn't depend on the React Native version or architecture. It has been checked against a bare React Native 0.83.6 app (New Architecture) on an iOS 27 simulator; that capture is part of the test suite.
 
 ## Requirements
 
@@ -66,7 +66,7 @@ Every audit writes `report.html`, `report.json`, and per-platform `snapshot.json
 | `input-name` | Text fields have a label | WCAG 2.2 SC 4.1.2, 3.3.2 |
 | `image-name` | Images have a text alternative, or are hidden (needs review) | WCAG 2.2 SC 1.1.1 |
 | `empty-stop` | VoiceOver never stops on an element with nothing to read (iOS) | WCAG 2.2 SC 4.1.2 |
-| `missing-role` | Tappable elements have `accessibilityRole` (Android) | WCAG 2.2 SC 4.1.2 |
+| `missing-role` | Tappable elements have `accessibilityRole` (on iOS, flagged for review) | WCAG 2.2 SC 4.1.2 |
 | `target-size` | Targets are 24×24, or spaced so a 24-wide circle around them touches nothing | WCAG 2.2 SC 2.5.8 |
 | `platform-target-size` | 44×44pt on iOS, 48×48dp on Android (`--profile platform`) | Apple HIG, Material Design |
 | `text-contrast` | Text reaches 4.5:1; 3:1–4.5:1 is flagged for review, as it passes only for large text | WCAG 2.2 SC 1.4.3 |
@@ -96,7 +96,7 @@ Automated checks find roughly a third of WCAG issues. The HTML report ends with 
 
 - Only the screen that's open is audited; navigate to each screen and run it again.
 - `hitSlop` is handled in JavaScript and isn't visible in the native tree, so a small target with a big `hitSlop` is still reported. Ignore it by `testID` once you've checked.
-- iOS doesn't expose whether an element without `accessibilityRole` is tappable, so on iOS a role-less Pressable is reported by `empty-stop` (no label) rather than `missing-role`.
+- iOS doesn't expose whether an element without `accessibilityRole` is tappable: a role-less Pressable looks the same as a View with `accessible={true}`. On iOS, `missing-role` asks for a review, and a role-less element with no label is reported by `empty-stop`. Role-less controls also aren't measured for target size on iOS.
 - Decorative images can't be told apart from meaningful ones, so `image-name` asks for a review.
 - Contrast is measured from screenshot pixels; text over photos or gradients is skipped and listed in the notes.
 - iOS physical devices aren't supported yet, only simulators.

@@ -3,7 +3,10 @@ import { audit } from "../src/core/audit.js";
 import { decodePng } from "../src/core/image.js";
 import { parseUiAutomator } from "../src/core/readers/android.js";
 import { extractJson, parseAxTree } from "../src/core/readers/ios.js";
+import { walk } from "../src/core/tree.js";
 import type { A11yNode, AuditResult, Snapshot } from "../src/core/types.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { androidScreenshot, fixture, iosScreenshot } from "./helpers.js";
 
 const androidSnapshot = (withScreenshot = true): Snapshot => {
@@ -116,8 +119,8 @@ describe("audit on iOS", () => {
     expect(by(result, "image-name")).toEqual(["promo-banner"]);
   });
 
-  it("doesn't run the Android-only role check", () => {
-    expect(result.rules.map((r) => r.id)).not.toContain("missing-role");
+  it("leaves a role-less element with no name to empty-stop", () => {
+    expect(by(result, "missing-role")).toEqual([]);
   });
 
   it("checks contrast of text and of buttons, whose text iOS folds in", () => {
@@ -176,5 +179,49 @@ describe("spacing exception", () => {
 
   it("doesn't judge a target cut off by the screen edge", () => {
     expect(by(audit(snapshot([node("a", 390, 100, 16), node("b", 380, 100, 16)])), "target-size")).toEqual([]);
+  });
+});
+
+/** Captured with AXe 1.8 from a bare React Native 0.83.6 app (New Architecture) on an iOS 27 simulator. */
+describe("real capture: React Native 0.83.6 on iOS", () => {
+  const root = parseAxTree(extractJson(fixture("ios-rn083-checkout.json")));
+  const snapshot: Snapshot = {
+    platform: "ios",
+    device: { platform: "ios", id: "sim", name: "iPhone 17", detail: "iOS 27.0" },
+    app: "A11yTestApp",
+    screen: { width: root.frame.width, height: root.frame.height },
+    scale: 3,
+    capturedAt: "2026-10-29T13:52:00.000Z",
+    root,
+    screenshot: decodePng(readFileSync(join(import.meta.dirname, "fixtures", "ios-rn083-checkout.png"))),
+  };
+  const result = audit(snapshot);
+
+  it("finds every planted bug and nothing else", () => {
+    expect(result.findings.map((f) => [f.rule, f.node.testID ?? f.node.name])).toEqual([
+      ["control-name", "close"],
+      ["input-name", "coupon-input"],
+      ["empty-stop", "cart"],
+      ["text-contrast", "Apply coupon"],
+      ["image-name", "promo-banner"],
+      ["missing-role", "guest"],
+      ["duplicate-name", "edit-shipping"],
+      ["duplicate-name", "edit-payment"],
+      ["redundant-role", "play"],
+    ]);
+  });
+
+  it("measures the real anti-aliased text", () => {
+    expect(result.findings.find((f) => f.rule === "text-contrast")!.message).toContain("2.54:1 (#9CA3AF on #FFFFFF)");
+  });
+
+  it("drops the scroll bars and AXe's repeated elements", () => {
+    const labels = [...walk(root)].map(({ node }) => node.label);
+    expect(labels.some((l) => /scroll bar/.test(l))).toBe(false);
+  });
+
+  it("passes the 20pt favorite under WCAG's spacing exception, but not the platform minimum", () => {
+    expect(by(result, "target-size")).toEqual([]);
+    expect(by(audit(snapshot, { profile: "platform" }), "platform-target-size")).toEqual(["close", "favorite"]);
   });
 });

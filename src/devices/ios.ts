@@ -53,6 +53,8 @@ async function describeUi(run: Exec, udid: string): Promise<{ tool: string; outp
     let result;
     try {
       result = await run(tool.name, tool.args(udid));
+      // Right after a simulator boots, AXe's first connection can time out; the next one works.
+      if (result.exitCode !== 0 && /timed out/i.test(result.stderr + result.stdout)) result = await run(tool.name, tool.args(udid));
     } catch (error) {
       if (error instanceof ToolMissingError) continue;
       throw error;

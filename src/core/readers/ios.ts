@@ -40,6 +40,7 @@ const KINDS: Record<string, Kind> = {
   Heading: "header",
   Header: "header",
   ScrollView: "scroll",
+  ScrollArea: "scroll",
   Table: "scroll",
   CollectionView: "scroll",
   Application: "container",
@@ -47,7 +48,13 @@ const KINDS: Record<string, Kind> = {
   Window: "container",
 };
 
-/** Types that take taps. A Pressable with no accessibilityRole has no button trait, so it reads as "Other". */
+/**
+ * Types that take taps. A Pressable with no accessibilityRole has no traits, so it
+ * reads as "GenericElement" (or "Other") and can't be told apart from a grouped View.
+ */
+/** Element types iOS gives an accessible element with no traits. */
+export const TRAITLESS_TYPES = new Set(["GenericElement", "Other"]);
+
 const INTERACTIVE = new Set<Kind>(["button", "link", "input", "switch", "checkbox", "radio", "slider", "tab"]);
 
 /** "{{0, 0}, {402, 874}}" → rect */
@@ -68,11 +75,21 @@ export function extractJson(output: string): RawAxElement[] {
   return Array.isArray(parsed) ? parsed : [parsed];
 }
 
+/** The scroll indicators UIScrollView adds; they aren't part of the app's UI. */
+const SCROLL_BAR = /^(Vertical|Horizontal) scroll bar\b/;
+
+const sameElement = (a: RawAxElement, b: RawAxElement) =>
+  typeOf(a) === typeOf(b) && a.AXLabel === b.AXLabel && JSON.stringify(a.frame ?? a.AXFrame) === JSON.stringify(b.frame ?? b.AXFrame);
+
+/** Drops scroll bars, and elements AXe lists twice in a row under the same parent. */
+const keep = (children: RawAxElement[]) =>
+  children.filter((c, i) => !SCROLL_BAR.test(c.AXLabel ?? "") && !children.slice(0, i).some((prev) => sameElement(prev, c)));
+
 export function parseAxTree(elements: RawAxElement[]): A11yNode {
   const convert = (raw: RawAxElement, id: string): A11yNode => {
     const type = typeOf(raw);
     const kind = KINDS[type] ?? "other";
-    const children = (raw.children ?? []).map((c, i) => convert(c, `${id}.${i}`));
+    const children = keep(raw.children ?? []).map((c, i) => convert(c, `${id}.${i}`));
     const frame = raw.frame ?? parseAxFrame(raw.AXFrame) ?? { x: 0, y: 0, width: 0, height: 0 };
     return {
       id,
@@ -83,8 +100,8 @@ export function parseAxTree(elements: RawAxElement[]): A11yNode {
       ...(raw.AXUniqueId ? { testID: raw.AXUniqueId } : {}),
       frame: { x: frame.x, y: frame.y, width: frame.width, height: frame.height },
       interactive: INTERACTIVE.has(kind),
-      // Leaves are accessibility elements; elements with children are containers VoiceOver moves through.
-      focusable: kind !== "container" && kind !== "scroll" && children.length === 0,
+      // A control is one VoiceOver stop even when AXe lists its text and icon inside it.
+      focusable: kind !== "container" && kind !== "scroll" && (children.length === 0 || INTERACTIVE.has(kind)),
       enabled: raw.enabled !== false,
       children,
     };

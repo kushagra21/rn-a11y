@@ -1,4 +1,5 @@
 import { ROLELESS_CLASSES } from "../readers/android.js";
+import { TRAITLESS_TYPES } from "../readers/ios.js";
 import { accessibleName, describe } from "../tree.js";
 import { BOTH, type Rule } from "./types.js";
 
@@ -80,21 +81,33 @@ export const emptyStop: Rule = {
       })),
 };
 
+const ROLE_FIX = 'Add accessibilityRole="button" (or "link", "tab", "checkbox", …).';
+
 export const missingRole: Rule = {
   id: "missing-role",
   title: "Controls say what they are",
   source: "WCAG 2.2 SC 4.1.2",
   profiles: BOTH,
-  platforms: ["android"],
-  run: ({ nodes }) =>
-    nodes
-      .filter(({ node }) => node.interactive && ROLELESS_CLASSES.has(node.className) && accessibleName(node))
-      .map(({ node }) => ({
-        severity: "serious",
-        message: `${label(accessibleName(node))} is tappable but has no role, so TalkBack doesn't say it's a button.`,
-        fix: 'Add accessibilityRole="button" (or "link", "tab", "checkbox", …). On iOS the same Pressable has no button trait either.',
-        node: describe(node),
-      })),
+  run: ({ nodes, snapshot }) =>
+    snapshot.platform === "android"
+      ? nodes
+          .filter(({ node }) => node.interactive && ROLELESS_CLASSES.has(node.className) && accessibleName(node))
+          .map(({ node }) => ({
+            severity: "serious",
+            message: `${label(accessibleName(node))} is tappable but has no role, so TalkBack doesn't say it's a button.`,
+            fix: ROLE_FIX,
+            node: describe(node),
+          }))
+      : // iOS doesn't say whether a trait-less element takes taps; a Pressable without a role looks like this.
+        nodes
+          .filter(({ node }) => node.focusable && node.children.length === 0 && TRAITLESS_TYPES.has(node.className) && accessibleName(node))
+          .map(({ node }) => ({
+            severity: "moderate",
+            review: true,
+            message: `${label(accessibleName(node))} has no role. If it is tappable, VoiceOver doesn't say it's a button.`,
+            fix: `${ROLE_FIX} If it only groups text, this is fine.`,
+            node: describe(node),
+          })),
 };
 
 const ROLE_WORDS: Partial<Record<string, RegExp>> = {
