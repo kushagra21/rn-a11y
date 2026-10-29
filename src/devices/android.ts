@@ -4,8 +4,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { decodePng } from "../core/image.js";
 import { parseDensity, parseUiAutomator } from "../core/readers/android.js";
-import type { DeviceInfo, Snapshot } from "../core/types.js";
-import { DeviceToolError, ToolMissingError, lastLine, type Exec } from "./exec.js";
+import type { DeviceInfo } from "../core/types.js";
+import { BusyError, DeviceToolError, ToolMissingError, lastLine, type DeviceSession, type Exec } from "./exec.js";
 
 /** adb from ANDROID_HOME / ANDROID_SDK_ROOT, the default SDK locations, then PATH. */
 export function findAdb(env = process.env, home = homedir()): string {
@@ -54,54 +54,51 @@ export async function listAndroidDevices(run: Exec, adbPath: string): Promise<{ 
 const REMOTE_XML = "/data/local/tmp/rn-a11y.xml";
 const REMOTE_PNG = "/data/local/tmp/rn-a11y.png";
 
-export interface AndroidCapture {
-  snapshot: Snapshot;
-  raw: { tree: string; screenshot?: Buffer };
-}
-
-export async function captureAndroid(
-  run: Exec,
-  adbPath: string,
-  device: DeviceInfo,
-  options: { package?: string; tmpDir: string; screenshot?: boolean },
-): Promise<AndroidCapture> {
+export function androidSession(run: Exec, adbPath: string, device: DeviceInfo, options: { package?: string; tmpDir: string }): DeviceSession {
   const shell = (...args: string[]) => adb(run, adbPath, ["-s", device.id, "shell", ...args]);
+  let dpScale: number | undefined;
+  const scale = async () => (dpScale ??= (parseDensity((await shell("wm", "density")).stdout) ?? 160) / 160);
 
-  const dump = await shell("uiautomator", "dump", REMOTE_XML);
-  const dumpOutput = `${dump.stdout}\n${dump.stderr}`;
-  if (/could not get idle state/i.test(dumpOutput)) {
-    throw new DeviceToolError(
-      "uiautomator couldn't read the screen because the app never stops animating (a spinner, Lottie or looping animation). Stop the animation, or turn off animations in Developer options, then try again.",
-    );
-  }
-  if (dump.exitCode !== 0 || /ERROR/i.test(dumpOutput)) throw new DeviceToolError(`uiautomator dump failed: ${lastLine(dumpOutput)}`);
-  // Take the screenshot right after the dump so they show the same moment.
-  let screenshot: Buffer | undefined;
-  if (options.screenshot !== false) {
-    const cap = await shell("screencap", "-p", REMOTE_PNG);
-    const local = join(options.tmpDir, "android-screenshot.png");
-    const pull = cap.exitCode === 0 ? await adb(run, adbPath, ["-s", device.id, "pull", REMOTE_PNG, local]) : cap;
-    if (pull.exitCode === 0) screenshot = await readFile(local);
-  }
-  const xml = await adb(run, adbPath, ["-s", device.id, "exec-out", "cat", REMOTE_XML]);
-  if (xml.exitCode !== 0 || !xml.stdout.includes("<hierarchy")) throw new DeviceToolError(`Couldn't read the uiautomator dump: ${lastLine(xml.stderr)}`);
-  const density = parseDensity((await shell("wm", "density")).stdout) ?? 160;
-
-  const dpScale = density / 160;
-  const root = parseUiAutomator(xml.stdout, { dpScale, ...(options.package ? { package: options.package } : {}) });
-  const image = screenshot ? decodePng(screenshot) : undefined;
-  const app = options.package ?? root.children.map((c) => c.package).find(Boolean);
   return {
-    snapshot: {
-      platform: "android",
-      device,
-      ...(app ? { app } : {}),
-      screen: image ? { width: image.width / dpScale, height: image.height / dpScale } : { width: root.frame.width, height: root.frame.height },
-      scale: dpScale,
-      capturedAt: new Date().toISOString(),
-      root,
-      ...(image ? { screenshot: image } : {}),
+    device,
+    async readTree() {
+      const dump = await shell("uiautomator", "dump", REMOTE_XML);
+      const dumpOutput = `${dump.stdout}\n${dump.stderr}`;
+      if (/could not get idle state/i.test(dumpOutput)) {
+        throw new BusyError(
+          "uiautomator couldn't read the screen because the app never stops animating (a spinner, Lottie or looping animation). Stop the animation, or turn off animations in Developer options, then try again.",
+        );
+      }
+      if (dump.exitCode !== 0 || /ERROR/i.test(dumpOutput)) throw new DeviceToolError(`uiautomator dump failed: ${lastLine(dumpOutput)}`);
+      const xml = await adb(run, adbPath, ["-s", device.id, "exec-out", "cat", REMOTE_XML]);
+      if (xml.exitCode !== 0 || !xml.stdout.includes("<hierarchy")) throw new DeviceToolError(`Couldn't read the uiautomator dump: ${lastLine(xml.stderr)}`);
+      const root = parseUiAutomator(xml.stdout, { dpScale: await scale(), ...(options.package ? { package: options.package } : {}) });
+      return { root, raw: xml.stdout };
     },
-    raw: { tree: xml.stdout, ...(screenshot ? { screenshot } : {}) },
+    async snapshot({ root, raw }, { screenshot: wanted }) {
+      let screenshot: Buffer | undefined;
+      if (wanted) {
+        const cap = await shell("screencap", "-p", REMOTE_PNG);
+        const local = join(options.tmpDir, "android-screenshot.png");
+        const pull = cap.exitCode === 0 ? await adb(run, adbPath, ["-s", device.id, "pull", REMOTE_PNG, local]) : cap;
+        if (pull.exitCode === 0) screenshot = await readFile(local);
+      }
+      const s = await scale();
+      const image = screenshot ? decodePng(screenshot) : undefined;
+      const app = options.package ?? root.children.map((c) => c.package).find(Boolean);
+      return {
+        snapshot: {
+          platform: "android",
+          device,
+          ...(app ? { app } : {}),
+          screen: image ? { width: image.width / s, height: image.height / s } : { width: root.frame.width, height: root.frame.height },
+          scale: s,
+          capturedAt: new Date().toISOString(),
+          root,
+          ...(image ? { screenshot: image } : {}),
+        },
+        raw: { tree: raw, ...(screenshot ? { screenshot } : {}) },
+      };
+    },
   };
 }

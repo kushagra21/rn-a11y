@@ -69,6 +69,8 @@ export interface DeviceInfo {
 /** Everything the rules need about one screen, captured at one moment. */
 export interface Snapshot {
   platform: Platform;
+  /** Screen name from watch mode, e.g. "Checkout". */
+  name?: string;
   device: DeviceInfo;
   /** iOS app name or Android package. */
   app?: string;
@@ -107,6 +109,7 @@ export type ProfileName = "wcag22-aa" | "platform";
 
 export interface AuditResult {
   platform: Platform;
+  name?: string;
   device: DeviceInfo;
   app?: string;
   profile: ProfileName;

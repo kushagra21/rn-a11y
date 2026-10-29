@@ -1,0 +1,14 @@
+[
+  {
+    "type": "Application",
+    "AXLabel": "Shop",
+    "frame": { "x": 0, "y": 0, "width": 402, "height": 874 },
+    "enabled": true,
+    "children": [
+      { "type": "Heading", "AXLabel": "Order placed", "frame": { "x": 16, "y": 120, "width": 370, "height": 38 }, "enabled": true, "children": [] },
+      { "type": "StaticText", "AXLabel": "Order #10234 arrives Friday", "frame": { "x": 16, "y": 170, "width": 370, "height": 22 }, "enabled": true, "children": [] },
+      { "type": "Button", "AXLabel": "Back to shop", "AXUniqueId": "back", "frame": { "x": 16, "y": 220, "width": 370, "height": 48 }, "enabled": true, "children": [] },
+      { "type": "Button", "AXLabel": null, "AXUniqueId": "share", "frame": { "x": 350, "y": 70, "width": 30, "height": 30 }, "enabled": true, "children": [] }
+    ]
+  }
+]

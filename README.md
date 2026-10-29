@@ -58,6 +58,17 @@ rn-a11y rules                          # list the rules
 
 Every audit writes `report.html`, `report.json`, and per-platform `snapshot.json`, `screenshot.png` and the raw tree to the report folder.
 
+### Watch mode
+
+```bash
+rn-a11y watch                          # every running platform
+rn-a11y watch -p android --verbose     # print each screen's issues as it's found
+```
+
+Move through the app as usual. rn-a11y reads the screen about once a second, waits until it has stopped moving, and audits each screen it hasn't seen before, then names it from its heading. Coming back to a screen doesn't audit it again, and changing numbers such as prices or counters don't make a new screen. Press Ctrl+C to finish. The report goes to `a11y-report/watch/`, with one section per screen and a contents list, and each run replaces the last one.
+
+On Android each read takes a little longer (uiautomator takes 1–3 seconds), and moments when the app is animating are skipped until it settles.
+
 ## Rules
 
 | Rule | Checks | Source |
@@ -94,7 +105,7 @@ Automated checks find roughly a third of WCAG issues. The HTML report ends with 
 
 ## Limits
 
-- Only the screen that's open is audited; navigate to each screen and run it again.
+- Only screens you open are audited: `audit` checks the current one and `watch` checks each one you visit. Nothing taps through the app for you.
 - `hitSlop` is handled in JavaScript and isn't visible in the native tree, so a small target with a big `hitSlop` is still reported. Ignore it by `testID` once you've checked.
 - iOS doesn't expose whether an element without `accessibilityRole` is tappable: a role-less Pressable looks the same as a View with `accessible={true}`. On iOS, `missing-role` asks for a review, and a role-less element with no label is reported by `empty-stop`. Role-less controls also aren't measured for target size on iOS.
 - Decorative images can't be told apart from meaningful ones, so `image-name` asks for a review.

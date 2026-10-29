@@ -2,6 +2,8 @@
 
 ## 0.1.0 (unreleased)
 
+- `watch` audits each new screen as you move through the app, into one report with a section per screen. Screens are recognized by their content, so revisiting one or seeing a number change doesn't audit it again.
+
 - `audit` reads the native accessibility tree of the open screen on an iOS simulator (AXe or idb) or an Android emulator or device (uiautomator), with a screenshot.
 - Rules: control-name, input-name, image-name, empty-stop, missing-role, target-size (WCAG 2.2 SC 2.5.8 with the spacing exception), platform-target-size, text-contrast, redundant-role, duplicate-name.
 - Profiles `wcag22-aa` and `platform`; ignores and defaults in `rn-a11y.config.json`; `--fail-on` for CI; `--from` to re-audit a saved capture.

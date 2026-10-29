@@ -6,9 +6,9 @@ import { atLeast, audit } from "../core/audit.js";
 import { PROFILES, loadConfig } from "../core/config.js";
 import { loadSnapshot, saveSnapshot, snapshotDirs } from "../core/store.js";
 import { SEVERITIES, type AuditResult, type DeviceInfo, type Platform, type ProfileName, type Severity, type Snapshot } from "../core/types.js";
-import { captureAndroid, findAdb, listAndroidDevices } from "../devices/android.js";
-import { DeviceToolError, exec, type Exec } from "../devices/exec.js";
-import { captureIos, listBootedSimulators } from "../devices/ios.js";
+import { androidSession, findAdb, listAndroidDevices } from "../devices/android.js";
+import { DeviceToolError, exec, type DeviceSession, type Exec } from "../devices/exec.js";
+import { iosSession, listBootedSimulators } from "../devices/ios.js";
 import { renderHtml, type ReportSection } from "../report/html.js";
 import { formatResult } from "../report/terminal.js";
 
@@ -46,6 +46,28 @@ const pickDevice = (devices: DeviceInfo[], wanted: string | undefined, platform:
   return devices.length > 1 ? { device, note: `${devices.length} ${platform} devices are running; using ${device!.name}. Pick one with --device.` } : { ...(device ? { device } : {}) };
 };
 
+/** Finds the device to use on one platform and opens a session on it. */
+export async function openSession(
+  run: Exec,
+  platform: Platform,
+  options: { device?: string; package?: string; tmpDir: string },
+): Promise<{ session: DeviceSession; notes: string[] }> {
+  const notes: string[] = [];
+  if (platform === "ios") {
+    const { device, note } = pickDevice(await listBootedSimulators(run), options.device, "iOS");
+    if (!device) throw new DeviceToolError(options.device ? `No booted iOS simulator matches "${options.device}".` : "No iOS simulator is booted. Boot one and open your app.");
+    if (note) notes.push(note);
+    return { session: iosSession(run, device, { tmpDir: options.tmpDir }), notes };
+  }
+  const adbPath = findAdb();
+  const { devices, unusable } = await listAndroidDevices(run, adbPath);
+  notes.push(...unusable);
+  const { device, note } = pickDevice(devices, options.device, "Android");
+  if (!device) throw new DeviceToolError(options.device ? `No Android device matches "${options.device}".` : "No Android emulator or device is connected. Start one and open your app.");
+  if (note) notes.push(note);
+  return { session: androidSession(run, adbPath, device, { tmpDir: options.tmpDir, ...(options.package ? { package: options.package } : {}) }), notes };
+}
+
 /** Captures every requested platform. A platform asked for by name must work; with "both", missing ones are skipped. */
 export async function captureAll(options: AuditOptions & { package?: string }, run: Exec = exec): Promise<{ captured: Captured[]; notes: string[] }> {
   const platforms: Platform[] = options.platform === "both" ? ["ios", "android"] : [options.platform];
@@ -57,27 +79,15 @@ export async function captureAll(options: AuditOptions & { package?: string }, r
   try {
     for (const platform of platforms) {
       try {
-        if (platform === "ios") {
-          if (!strict && process.platform !== "darwin") continue;
-          const { device, note } = pickDevice(await listBootedSimulators(run), options.device, "iOS");
-          if (!device) throw new DeviceToolError(options.device ? `No booted iOS simulator matches "${options.device}".` : "No iOS simulator is booted. Boot one and open your app.");
-          if (note) notes.push(note);
-          const { snapshot, raw } = await captureIos(run, device, { tmpDir, screenshot: options.screenshot });
-          captured.push({ snapshot, raw });
-        } else {
-          const adbPath = findAdb();
-          const { devices, unusable } = await listAndroidDevices(run, adbPath);
-          notes.push(...unusable);
-          const { device, note } = pickDevice(devices, options.device, "Android");
-          if (!device) throw new DeviceToolError(options.device ? `No Android device matches "${options.device}".` : "No Android emulator or device is connected. Start one and open your app.");
-          if (note) notes.push(note);
-          const { snapshot, raw } = await captureAndroid(run, adbPath, device, {
-            tmpDir,
-            screenshot: options.screenshot,
-            ...(options.package ? { package: options.package } : {}),
-          });
-          captured.push({ snapshot, raw });
-        }
+        if (platform === "ios" && !strict && process.platform !== "darwin") continue;
+        const opened = await openSession(run, platform, {
+          tmpDir,
+          ...(options.device ? { device: options.device } : {}),
+          ...(options.package ? { package: options.package } : {}),
+        });
+        notes.push(...opened.notes);
+        const tree = await opened.session.readTree();
+        captured.push(await opened.session.snapshot(tree, { screenshot: options.screenshot }));
       } catch (error) {
         if (strict || !(error instanceof DeviceToolError)) throw error;
         skipped.push(`${platform === "ios" ? "iOS" : "Android"}: ${error.message}`);
@@ -92,13 +102,23 @@ export async function captureAll(options: AuditOptions & { package?: string }, r
   return { captured, notes };
 }
 
-export async function runAudit(options: AuditOptions, run: Exec = exec, version = "0.0.0") {
+/** Flags merged over rn-a11y.config.json. */
+export async function loadSettings(options: Pick<AuditOptions, "cwd" | "profile" | "failOn" | "ignore" | "package">) {
   const config = await loadConfig(options.cwd);
   const profile = (options.profile ?? config.profile ?? "wcag22-aa") as ProfileName;
   if (!PROFILES.includes(profile)) throw new DeviceToolError(`--profile must be one of ${PROFILES.join(", ")}.`);
   const failOn = (options.failOn ?? config.failOn) as Severity | undefined;
   if (failOn && !SEVERITIES.includes(failOn)) throw new DeviceToolError(`--fail-on must be one of ${SEVERITIES.join(", ")}.`);
   const ignore = [...(config.ignore ?? []), ...(options.ignore ?? []).map((rule) => ({ rule }))];
+  const pkg = options.package ?? config.package;
+  return { profile, failOn, ignore, ...(pkg ? { package: pkg } : {}) };
+}
+
+export const failedAt = (results: AuditResult[], failOn: Severity | undefined) =>
+  failOn ? results.some((r) => r.findings.some((f) => atLeast(f.severity, failOn))) : false;
+
+export async function runAudit(options: AuditOptions, run: Exec = exec, version = "0.0.0") {
+  const { profile, failOn, ignore, package: pkg } = await loadSettings(options);
 
   let captured: Captured[];
   let notes: string[] = [];
@@ -107,7 +127,6 @@ export async function runAudit(options: AuditOptions, run: Exec = exec, version 
     if (dirs.length === 0) throw new DeviceToolError(`No snapshot found in ${options.from}. Point --from at a report folder or one of its ios/ or android/ folders.`);
     captured = await Promise.all(dirs.map(async (dir) => ({ snapshot: await loadSnapshot(dir), dir })));
   } else {
-    const pkg = options.package ?? config.package;
     ({ captured, notes } = await captureAll({ ...options, ...(pkg ? { package: pkg } : {}) }, run));
   }
 
@@ -122,15 +141,14 @@ export async function runAudit(options: AuditOptions, run: Exec = exec, version 
     for (const [i, { snapshot, raw, dir: from }] of captured.entries()) {
       if (raw) await saveSnapshot(join(dir, snapshot.platform), snapshot, raw);
       const png = raw?.screenshot ?? (from && snapshot.screenshot ? await readFile(join(from, "screenshot.png")) : undefined);
-      sections.push({ result: results[i]!, screen: snapshot.screen, ...(png ? { screenshot: png } : {}) });
+      sections.push({ result: results[i]!, screen: snapshot.screen, ...(snapshot.name ? { title: snapshot.name } : {}), ...(png ? { screenshot: png } : {}) });
     }
     await writeFile(join(dir, "report.json"), `${JSON.stringify({ version, results }, null, 2)}\n`);
     reportPath = join(dir, "report.html");
     await writeFile(reportPath, renderHtml(sections, { ...(options.name ? { title: options.name } : {}), version }));
   }
 
-  const failed = failOn ? results.some((r) => r.findings.some((f) => atLeast(f.severity, failOn))) : false;
-  return { results, notes, reportPath, failed, failOn };
+  return { results, notes, reportPath, failed: failedAt(results, failOn), failOn };
 }
 
 export async function auditCommand(options: AuditOptions, version: string) {

@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import type { A11yNode, DeviceInfo, Snapshot } from "../core/types.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -21,6 +22,9 @@ export class ToolMissingError extends Error {
 /** A platform's tooling is unavailable or failed; the message says how to fix it. */
 export class DeviceToolError extends Error {}
 
+/** The screen couldn't be read just now (it's animating); trying again later may work. */
+export class BusyError extends DeviceToolError {}
+
 export const exec: Exec = async (file, args) => {
   try {
     const { stdout, stderr } = await execFileAsync(file, args, { timeout: 60_000, maxBuffer: 64 * 1024 * 1024 });
@@ -37,3 +41,11 @@ export const exec: Exec = async (file, args) => {
 };
 
 export const lastLine = (text: string) => text.trim().split("\n").at(-1)?.trim() ?? "";
+
+/** Reads the open screen of one device; one tree read per check, a screenshot only when asked. */
+export interface DeviceSession {
+  device: DeviceInfo;
+  readTree(): Promise<{ root: A11yNode; raw: string }>;
+  /** The snapshot for a tree just read, with a screenshot taken now. */
+  snapshot(tree: { root: A11yNode; raw: string }, options: { screenshot: boolean }): Promise<{ snapshot: Snapshot; raw: { tree: string; screenshot?: Buffer } }>;
+}

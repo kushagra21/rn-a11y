@@ -5,6 +5,7 @@ import { Command, Option } from "commander";
 import pc from "picocolors";
 import { auditCommand } from "./commands/audit.js";
 import { doctorCommand } from "./commands/doctor.js";
+import { watchCommand } from "./commands/watch.js";
 import { RULES } from "./core/rules/index.js";
 import { SEVERITIES } from "./core/types.js";
 import { DeviceToolError } from "./devices/exec.js";
@@ -39,6 +40,22 @@ export function buildProgram(): Command {
     .option("--no-report", "don't write the HTML report")
     .option("--json", "print machine-readable JSON")
     .action((options) => auditCommand(options, version));
+
+  program
+    .command("watch")
+    .description("Audit each new screen as you move through the app, into one report")
+    .option("-C, --cwd <dir>", "project root, where rn-a11y.config.json and the report folder live", process.cwd())
+    .addOption(new Option("-p, --platform <platform>", "which platform to watch").choices(["ios", "android", "both"]).default("both"))
+    .option("-d, --device <id or name>", "device to use when several are running")
+    .option("--package <name>", "Android: audit only this app's windows")
+    .addOption(new Option("--profile <profile>", "wcag22-aa (24×24 targets) or platform (adds Apple HIG 44pt / Material 48dp)").choices(["wcag22-aa", "platform"]))
+    .option("-o, --out <dir>", "report folder (default: a11y-report/watch)")
+    .addOption(new Option("--fail-on <severity>", "exit with code 1 when an issue this severe or worse is found").choices(SEVERITIES))
+    .option("--ignore <rules>", "rule ids to skip, comma-separated", collect)
+    .option("--interval <ms>", "milliseconds between checks of the screen", (v) => Number.parseInt(v, 10), 1000)
+    .option("--no-screenshot", "skip screenshots (no contrast check, no pictures in the report)")
+    .option("-v, --verbose", "print every issue of each new screen, not just the counts")
+    .action((options) => watchCommand(options, version));
 
   program.command("doctor").description("Check the tools rn-a11y needs and list running devices").action(doctorCommand);
 

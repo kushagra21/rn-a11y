@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { decodePng } from "./image.js";
@@ -25,8 +25,18 @@ export async function loadSnapshot(dir: string): Promise<Snapshot> {
   return snapshot;
 }
 
-/** A report folder holds ios/ and android/ snapshots; a snapshot folder holds snapshot.json itself. */
+/**
+ * A snapshot folder holds snapshot.json itself; an audit report holds ios/ and android/
+ * snapshot folders; a watch report holds screens/<nn-name>/ folders of those.
+ */
 export function snapshotDirs(dir: string): string[] {
   if (existsSync(join(dir, "snapshot.json"))) return [dir];
-  return ["ios", "android"].map((p) => join(dir, p)).filter((d) => existsSync(join(d, "snapshot.json")));
+  const platforms = (d: string) => ["ios", "android"].map((p) => join(d, p)).filter((p) => existsSync(join(p, "snapshot.json")));
+  const screens = join(dir, "screens");
+  if (!existsSync(screens)) return platforms(dir);
+  return readdirSync(screens, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .sort()
+    .flatMap((name) => platforms(join(screens, name)));
 }

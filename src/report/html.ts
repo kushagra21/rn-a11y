@@ -3,6 +3,8 @@ import type { AuditResult, Finding } from "../core/types.js";
 
 export interface ReportSection {
   result: AuditResult;
+  /** Watch mode: the screen's name, shown as the section heading. */
+  title?: string;
   screen: { width: number; height: number };
   /** PNG bytes of the screenshot, embedded so the report is one file. */
   screenshot?: Buffer;
@@ -78,9 +80,10 @@ function section(s: ReportSection, index: number) {
         ${boxes(r.findings, s.screen, key)}
       </div>`
     : '<p class="noshot">No screenshot was captured.</p>';
-  return `<section class="platform">
+  const heading = s.title ? `${esc(s.title)} <span class="sub">${platform}${r.app ? ` · ${esc(r.app)}` : ""}</span>` : `${platform} <span class="sub">${esc(r.app ?? "")}</span>`;
+  return `<section class="platform" id="s${index}">
   <header class="phead">
-    <h2>${platform} <span class="sub">${esc(r.app ?? "")}</span></h2>
+    <h2>${heading}</h2>
     <p class="device">${esc(r.device.name)}${r.device.detail ? ` · ${esc(r.device.detail)}` : ""} · ${r.stats.elements} elements, ${r.stats.targets} touch targets, ${r.stats.texts} text</p>
     <p class="summary">${summary}</p>
   </header>
@@ -95,6 +98,16 @@ function section(s: ReportSection, index: number) {
     </div>
   </div>
 </section>`;
+}
+
+function contents(sections: ReportSection[]) {
+  const rows = sections.map((s, i) => {
+    const pills = s.result.findings.length
+      ? counts(s.result.findings).map(([sev, n]) => `<span class="pill sev-${sev}">${n} ${sev}</span>`).join(" ")
+      : '<span class="pill ok">No issues</span>';
+    return `<li><a href="#s${i}">${esc(s.title ?? `Screen ${i + 1}`)}</a> <span class="rule">${s.result.platform === "ios" ? "iOS" : "Android"}</span> ${pills}</li>`;
+  });
+  return `<nav class="toc" aria-label="Screens"><h2>${sections.length} screens</h2><ol>${rows.join("")}</ol></nav>`;
 }
 
 export function renderHtml(sections: ReportSection[], options: { title?: string; version: string }): string {
@@ -164,6 +177,10 @@ details ul { padding-left: 18px; margin: 8px 0 0; } details li { margin: 4px 0; 
 .manual li { margin: 6px 0; }
 .filters { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 20px; font-size: 14px; }
 .filters label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.toc { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 20px; margin-bottom: 28px; }
+.toc h2 { margin: 0 0 8px; font-size: 16px; }
+.toc ol { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+.toc a { color: var(--text); font-weight: 600; }
 footer { color: var(--muted); font-size: 13px; margin-top: 24px; }
 @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } .left { position: static; max-width: 340px; margin: 0 auto; } }
 </style>
@@ -175,6 +192,7 @@ footer { color: var(--muted); font-size: 13px; margin-top: 24px; }
   <div class="filters" role="group" aria-label="Show severities">
     ${["critical", "serious", "moderate", "minor"].map((s) => `<label class="sev-${s}"><input type="checkbox" checked value="${s}"> <span style="color:var(--text)">${s}</span></label>`).join("")}
   </div>
+  ${sections.length > 1 && sections.some((s) => s.title) ? contents(sections) : ""}
   ${sections.map(section).join("\n")}
   <section class="manual">
     <h2>Check by hand</h2>

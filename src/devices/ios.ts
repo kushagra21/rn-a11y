@@ -2,8 +2,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { decodePng } from "../core/image.js";
 import { extractJson, parseAxTree } from "../core/readers/ios.js";
-import type { DeviceInfo, Snapshot } from "../core/types.js";
-import { DeviceToolError, ToolMissingError, lastLine, type Exec } from "./exec.js";
+import type { DeviceInfo } from "../core/types.js";
+import { DeviceToolError, ToolMissingError, lastLine, type DeviceSession, type Exec } from "./exec.js";
 
 /** `com.apple.CoreSimulator.SimRuntime.iOS-18-2` → `iOS 18.2` */
 export function runtimeLabel(runtime: string): string {
@@ -65,35 +65,36 @@ async function describeUi(run: Exec, udid: string): Promise<{ tool: string; outp
   throw new DeviceToolError(NO_TREE_TOOL);
 }
 
-export interface IosCapture {
-  snapshot: Snapshot;
-  raw: { tree: string; screenshot?: Buffer };
-  tool: string;
-}
-
-export async function captureIos(run: Exec, device: DeviceInfo, options: { tmpDir: string; screenshot?: boolean }): Promise<IosCapture> {
-  const { tool, output } = await describeUi(run, device.id);
-  let screenshot: Buffer | undefined;
-  if (options.screenshot !== false) {
-    const local = join(options.tmpDir, "ios-screenshot.png");
-    const shot = await simctl(run, ["io", device.id, "screenshot", "--type=png", local]);
-    if (shot.exitCode === 0) screenshot = await readFile(local);
-  }
-  const root = parseAxTree(extractJson(output));
-  if (root.frame.width <= 0) throw new DeviceToolError("The accessibility tree has no screen size. Is an app open on the simulator?");
-  const image = screenshot ? decodePng(screenshot) : undefined;
+export function iosSession(run: Exec, device: DeviceInfo, options: { tmpDir: string }): DeviceSession {
   return {
-    tool,
-    snapshot: {
-      platform: "ios",
-      device,
-      ...(root.label ? { app: root.label } : {}),
-      screen: { width: root.frame.width, height: root.frame.height },
-      scale: image ? image.width / root.frame.width : 1,
-      capturedAt: new Date().toISOString(),
-      root,
-      ...(image ? { screenshot: image } : {}),
+    device,
+    async readTree() {
+      const { output } = await describeUi(run, device.id);
+      const root = parseAxTree(extractJson(output));
+      if (root.frame.width <= 0) throw new DeviceToolError("The accessibility tree has no screen size. Is an app open on the simulator?");
+      return { root, raw: output };
     },
-    raw: { tree: output, ...(screenshot ? { screenshot } : {}) },
+    async snapshot({ root, raw }, { screenshot: wanted }) {
+      let screenshot: Buffer | undefined;
+      if (wanted) {
+        const local = join(options.tmpDir, "ios-screenshot.png");
+        const shot = await simctl(run, ["io", device.id, "screenshot", "--type=png", local]);
+        if (shot.exitCode === 0) screenshot = await readFile(local);
+      }
+      const image = screenshot ? decodePng(screenshot) : undefined;
+      return {
+        snapshot: {
+          platform: "ios",
+          device,
+          ...(root.label ? { app: root.label } : {}),
+          screen: { width: root.frame.width, height: root.frame.height },
+          scale: image ? image.width / root.frame.width : 1,
+          capturedAt: new Date().toISOString(),
+          root,
+          ...(image ? { screenshot: image } : {}),
+        },
+        raw: { tree: raw, ...(screenshot ? { screenshot } : {}) },
+      };
+    },
   };
 }
