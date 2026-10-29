@@ -45,10 +45,10 @@ describe("reading links", () => {
     expect(() => parseLinks('{"other":1}', "f.json")).toThrow(/must look like/);
   });
 
-  it("points to rn-deeplink when there's no links file", async () => {
+  it("says how to pass links when there's no links file", async () => {
     const dir = mkdtempSync(join(tmpdir(), "rn-a11y-links-"));
     try {
-      await expect(loadLinks(dir, true)).rejects.toThrow(/rn-deeplink links add/);
+      await expect(loadLinks(dir, true)).rejects.toThrow(/--links links\.txt.*--url/);
       await expect(loadLinks(dir, undefined, [])).rejects.toThrow(/No links to audit/);
       expect(await loadLinks(dir, undefined, ["myapp://x"])).toEqual([{ url: "myapp://x" }]);
       await expect(loadLinks(dir, undefined, ["nope"])).rejects.toBeInstanceOf(DeviceToolError);

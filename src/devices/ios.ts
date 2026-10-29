@@ -109,7 +109,9 @@ export function iosSession(
       }
       // -10814 is kLSApplicationNotFoundErr: no installed app registers this scheme.
       if (/-10814|LSApplicationWorkspaceErrorDomain/.test(result.stderr)) {
-        throw new DeviceToolError(`No app on ${device.name} handles ${new URL(url).protocol}// links. Check the scheme with rn-deeplink scan.`);
+        throw new DeviceToolError(
+          `No app on ${device.name} handles ${new URL(url).protocol}// links. Check that CFBundleURLTypes in Info.plist lists the scheme and that the installed build includes it (rn-deeplink scan shows what the project registers).`,
+        );
       }
       throw new DeviceToolError(`simctl couldn't open ${url}: ${lastLine(result.stderr)}`);
     },

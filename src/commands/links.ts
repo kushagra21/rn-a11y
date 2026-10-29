@@ -61,7 +61,9 @@ export async function loadLinks(cwd: string, file: string | true | undefined, ur
     const path = resolve(cwd, file === true ? LINKS_FILE : file);
     if (!existsSync(path)) {
       throw new DeviceToolError(
-        file === true ? `No ${LINKS_FILE} in ${cwd}. Save links with rn-deeplink links add, or pass a file: --links links.txt` : `Can't find ${file}.`,
+        file === true
+          ? `No ${LINKS_FILE} in ${cwd}. Pass a file with --links links.txt (one URL per line), or URLs with --url myapp://home.`
+          : `Can't find ${file}.`,
       );
     }
     links.push(...parseLinks(await readFile(path, "utf8"), file === true ? LINKS_FILE : file));

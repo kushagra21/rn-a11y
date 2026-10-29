@@ -73,7 +73,11 @@ export function androidSession(run: Exec, adbPath: string, device: DeviceInfo, o
       if (options.package) args.push(options.package);
       const result = await shell(...args);
       const output = `${result.stdout}\n${result.stderr}`;
-      if (/unable to resolve Intent/i.test(output)) throw new DeviceToolError(`No app on ${device.name} handles ${url}. Check the intent filters with rn-deeplink scan.`);
+      if (/unable to resolve Intent/i.test(output)) {
+        throw new DeviceToolError(
+          `No app on ${device.name} handles ${url}. Check that an <intent-filter> in AndroidManifest.xml lists this scheme and host, and that the installed build includes it (rn-deeplink scan shows what the project registers).`,
+        );
+      }
       if (result.exitCode !== 0 || /^Error:/m.test(output)) throw new DeviceToolError(`adb couldn't open ${url}: ${lastLine(output)}`);
     },
     async readTree() {
